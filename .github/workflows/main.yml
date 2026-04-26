@@ -1,0 +1,65 @@
+name: Extract ZIP File
+
+on:
+  push:
+    paths:
+      - '**.zip'
+  workflow_dispatch:
+
+jobs:
+  unzip-and-commit:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install unzip
+        run: sudo apt-get update && sudo apt-get install -y unzip
+      
+      - name: Find and extract zip file
+        run: |
+          # Cari file zip di root folder
+          ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" ! -path "./.git/*" | head -1)
+          
+          if [[ -n "$ZIP_FILE" ]]; then
+            echo "📦 Menemukan file: $ZIP_FILE"
+            
+            # Buat folder temporary
+            EXTRACT_DIR="temp_extract_$(date +%s)"
+            mkdir -p "$EXTRACT_DIR"
+            
+            # Ekstrak file zip
+            unzip -q "$ZIP_FILE" -d "$EXTRACT_DIR"
+            
+            # Pindahkan isinya ke root repository
+            echo "📂 Memindahkan file ke root repository..."
+            mv -n "$EXTRACT_DIR"/* ./ 2>/dev/null || true
+            mv -n "$EXTRACT_DIR"/.[!.]* ./ 2>/dev/null || true
+            
+            # Hapus folder temporary dan file zip asli
+            rm -rf "$EXTRACT_DIR"
+            rm "$ZIP_FILE"
+            
+            echo "✅ Ekstraksi selesai. File zip asli telah dihapus."
+          else
+            echo "ℹ️ Tidak ada file zip yang ditemukan."
+            exit 0
+          fi
+      
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          
+          if git diff --staged --quiet; then
+            echo "Tidak ada perubahan untuk di-commit"
+          else
+            git commit -m "Auto-extract zip file"
+            git push
+            echo "✅ Perubahan berhasil di-push ke repository"
+          fi
